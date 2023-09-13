@@ -1,0 +1,1158 @@
+prompt,completion
+"Create job shop scheduling model with 7 jobs and 5 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Fifth task of Job five should be the last task to complete[DEFINE_IMPORTS]","# imports
+import numpy as np
+import pandas as pd
+import plotly.express as px
+from cpmpy import *
+import random"
+"Create job shop scheduling model with 7 jobs and 5 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Fifth task of Job five should be the last task to complete[DEFINE_CONFIGURATIONS]","# configurations
+random.seed(1)
+number_of_jobs = 7  
+number_of_machines = 5  
+maximum_duration = 20
+due_date_allowance = 1.3"
+"Create job shop scheduling model with 7 jobs and 5 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Fifth task of Job five should be the last task to complete[DEFINE_UTILITY_FUNCTIONS]","# utility functions
+def get_durations(number_of_jobs, number_of_machines, maximum_duration):
+    return np.array([[random.randint(1, maximum_duration) for _ in  range(number_of_machines)] for _ in range(number_of_jobs)])
+
+def get_last_time(durations):
+    return sum(durations)
+
+def get_task_to_machine_mapping(number_of_jobs, number_of_machines):
+    return np.array([random.sample(range(1, number_of_machines+1), number_of_machines) for _ in range(number_of_jobs)])
+
+def get_jobs(number_of_jobs):
+    return [f""Job Number{i+1}"" for i in range(number_of_jobs)]
+
+def get_due_dates(due_date_allowance, durations):
+    return (0 + due_date_allowance*np.sum(durations, axis=1)).astype(int)"
+"Create job shop scheduling model with 7 jobs and 5 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Fifth task of Job five should be the last task to complete[DEFINE_DATA_PREPARATION]","# data preparation
+durations = get_durations(number_of_jobs, number_of_machines, maximum_duration)
+last_time = get_last_time(durations)
+due_dates = get_due_dates(due_date_allowance, durations)
+task_to_machine_mapping = get_task_to_machine_mapping(number_of_jobs, number_of_machines)
+jobs = get_jobs(number_of_jobs)"
+"Create job shop scheduling model with 7 jobs and 5 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Fifth task of Job five should be the last task to complete[DEFINE_MODEL]","# model
+def model(last_time, task_to_machine_mapping):
+    number_of_jobs, number_of_tasks = task_to_machine_mapping.shape  # jobs are rows, tasks are columns
+
+    # Decision variables
+    start = intvar(0, last_time, shape=(number_of_jobs, number_of_tasks), name=""start"")  # Start time of each task
+    end = intvar(0, last_time, shape=(number_of_jobs, number_of_tasks), name=""end"")  # End time of each task
+    tardiness = intvar(0, last_time, shape=(number_of_jobs), name=""tardiness"")  # tardiness of each job
+
+    
+    # model
+    m = Model()
+    return m, (start, end, tardiness)"
+"Create job shop scheduling model with 7 jobs and 5 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Fifth task of Job five should be the last task to complete[DEFINE_CONSTRAINTS]","# constraints
+def constraints(m, start, end, tardiness, durations, task_to_machine_mapping, due_dates):
+    number_of_jobs, number_of_tasks = task_to_machine_mapping.shape
+    m += (end == start + durations) # The end of every task is the sum of its start and duration
+
+    # No overlap on the same machine
+    for j in range(number_of_jobs): 
+        for t in range(number_of_tasks):
+            m += [ (end[j, t] <= start[j2, t2]) | (end[j2, t2] <= start[j, t])
+                   for j2 in range(number_of_jobs) for t2 in range(number_of_tasks)
+                   if task_to_machine_mapping[j, t] == task_to_machine_mapping[j2, t2] and j != j2]
+
+    # Precedences: do tasks in order for all jobs
+    for t in range(number_of_tasks - 1):
+        m += [start[:, t + 1] >= end[:, t]]
+    
+    # calculate tardiness
+    for j in range(number_of_jobs):
+        m += (tardiness[j] == max([end[j, number_of_tasks -1] - due_dates[j], 0]))
+        
+     # Fifth task of Job five should be the last task to complete
+    for i in range(number_of_jobs):
+        if i != 4:
+            m += (end[i, 4] <= start[4, 4])
+    return m"
+"Create job shop scheduling model with 7 jobs and 5 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Fifth task of Job five should be the last task to complete[DEFINE_OBJECTIVE]","# Objective
+def objective(m, tardiness):
+    m.minimize(max(tardiness))
+
+    return m"
+"Create job shop scheduling model with 7 jobs and 5 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Fifth task of Job five should be the last task to complete[DEFINE_VISUALIZATION]","# visualization
+def visualize(jobs, task_to_machine_mapping, start, end):
+    number_of_jobs, number_of_tasks = task_to_machine_mapping.shape  # jobs are rows, tasks are columns
+
+    job_names = np.repeat(jobs, number_of_tasks)
+    full_names = np.array([[f""Task {j}_{t}"" for t in range(number_of_tasks)] for j in jobs])
+    df = pd.DataFrame({'Start': start.flatten(),
+                       'End': end.flatten(),
+                       'Machine': task_to_machine_mapping.flatten().astype(str),
+                       'Job': job_names.flatten(),
+                       'Name': full_names.flatten(),
+                       })
+    df['Time'] = df['End'] - df['Start']  # Length on x-axis
+
+    fig = px.bar(df, orientation='h',
+                 base=""Start"", x=""Time"", y=""Machine"", color=""Job"", text=""Name"")
+    return fig.show()"
+"Create job shop scheduling model with 7 jobs and 5 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Fifth task of Job five should be the last task to complete[DEFINE_SOLUTION]","#define model
+(model, (start,end, tardiness)) = model(last_time, task_to_machine_mapping)
+
+#define constraints
+model = constraints(model, start, end, tardiness, durations, task_to_machine_mapping, due_dates)
+
+#define objective
+model = objective(model, tardiness)
+
+# solve
+sat = model.solve()
+if not sat: raise Exception(""No solution found."")
+    
+# output
+print(""Max Tardiness:"", max(tardiness.value()))
+print(""Start times:"", start.value())
+print(""End times:"", end.value())
+print(""Tardiness:"", tardiness.value())
+
+# visualize
+visualize(jobs, task_to_machine_mapping, start.value(), end.value())"
+"Create job shop scheduling model with 6 jobs and 5 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised.Note: Job two has to be completed first[DEFINE_IMPORTS]","# imports
+import numpy as np
+import pandas as pd
+import plotly.express as px
+from cpmpy import *
+import random"
+"Create job shop scheduling model with 6 jobs and 5 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised.Note: Job two has to be completed first[DEFINE_CONFIGURATIONS]","# configurations
+random.seed(1)
+number_of_jobs = 6  
+number_of_machines = 5  
+maximum_duration = 20
+due_date_allowance = 1.3"
+"Create job shop scheduling model with 6 jobs and 5 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised.Note: Job two has to be completed first[DEFINE_UTILITY_FUNCTIONS]","# utility functions
+def get_durations(number_of_jobs, number_of_machines, maximum_duration):
+    return np.array([[random.randint(1, maximum_duration) for _ in  range(number_of_machines)] for _ in range(number_of_jobs)])
+
+def get_last_time(durations):
+    return sum(durations)
+
+def get_task_to_machine_mapping(number_of_jobs, number_of_machines):
+    return np.array([random.sample(range(1, number_of_machines+1), number_of_machines) for _ in range(number_of_jobs)])
+
+def get_jobs(number_of_jobs):
+    return [f""Job Number{i+1}"" for i in range(number_of_jobs)]
+
+def get_due_dates(due_date_allowance, durations):
+    return (0 + due_date_allowance*np.sum(durations, axis=1)).astype(int)"
+"Create job shop scheduling model with 6 jobs and 5 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised.Note: Job two has to be completed first[DEFINE_DATA_PREPARATION]","# data preparation
+durations = get_durations(number_of_jobs, number_of_machines, maximum_duration)
+last_time = get_last_time(durations)
+due_dates = get_due_dates(due_date_allowance, durations)
+task_to_machine_mapping = get_task_to_machine_mapping(number_of_jobs, number_of_machines)
+jobs = get_jobs(number_of_jobs)"
+"Create job shop scheduling model with 6 jobs and 5 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised.Note: Job two has to be completed first[DEFINE_MODEL]","# model
+def model(last_time, task_to_machine_mapping):
+    number_of_jobs, number_of_tasks = task_to_machine_mapping.shape  # jobs are rows, tasks are columns
+
+    # Decision variables
+    start = intvar(0, last_time, shape=(number_of_jobs, number_of_tasks), name=""start"")  # Start time of each task
+    end = intvar(0, last_time, shape=(number_of_jobs, number_of_tasks), name=""end"")  # End time of each task
+    tardiness = intvar(0, last_time, shape=(number_of_jobs), name=""tardiness"")  # tardiness of each job
+
+    
+    # model
+    m = Model()
+    return m, (start, end, tardiness)"
+"Create job shop scheduling model with 6 jobs and 5 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised.Note: Job two has to be completed first[DEFINE_CONSTRAINTS]","# constraints
+def constraints(m, start, end, durations, task_to_machine_mapping, due_dates):
+    number_of_jobs, number_of_tasks = task_to_machine_mapping.shape
+    m += (end == start + durations) # The end of every task is the sum of its start and duration
+
+    # No overlap on the same machine
+    for j in range(number_of_jobs): 
+        for t in range(number_of_tasks):
+            m += [ (end[j, t] <= start[j2, t2]) | (end[j2, t2] <= start[j, t])
+                   for j2 in range(number_of_jobs) for t2 in range(number_of_tasks)
+                   if task_to_machine_mapping[j, t] == task_to_machine_mapping[j2, t2] and j != j2]
+
+    # Precedences: do tasks in order for all jobs
+    for t in range(number_of_tasks - 1):
+        m += [start[:, t + 1] >= end[:, t]]
+    
+    # calculate tardiness
+    for j in range(number_of_jobs):
+        m += (tardiness[j] == max([end[j, number_of_tasks -1] - due_dates[j], 0]))
+        
+    # Job two has to be completed first
+    for i in range(number_of_jobs):
+        if i != 1:
+            m += (end[i, 4] > end[1, 4]) 
+    return m"
+"Create job shop scheduling model with 6 jobs and 5 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised.Note: Job two has to be completed first[DEFINE_OBJECTIVE]","# Objective
+def objective(m, tardiness):
+    m.minimize(max(tardiness))
+
+    return m"
+"Create job shop scheduling model with 6 jobs and 5 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised.Note: Job two has to be completed first[DEFINE_VISUALIZATION]","# visualization
+def visualize(jobs, task_to_machine_mapping, start, end):
+    number_of_jobs, number_of_tasks = task_to_machine_mapping.shape  # jobs are rows, tasks are columns
+
+    job_names = np.repeat(jobs, number_of_tasks)
+    full_names = np.array([[f""Task {j}_{t}"" for t in range(number_of_tasks)] for j in jobs])
+    df = pd.DataFrame({'Start': start.flatten(),
+                       'End': end.flatten(),
+                       'Machine': task_to_machine_mapping.flatten().astype(str),
+                       'Job': job_names.flatten(),
+                       'Name': full_names.flatten(),
+                       })
+    df['Time'] = df['End'] - df['Start']  # Length on x-axis
+
+    fig = px.bar(df, orientation='h',
+                 base=""Start"", x=""Time"", y=""Machine"", color=""Job"", text=""Name"")
+    return fig.show()"
+"Create job shop scheduling model with 6 jobs and 5 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised.Note: Job two has to be completed first[DEFINE_SOLUTION]","#define model
+(model, (start,end, tardiness)) = model(last_time, task_to_machine_mapping)
+
+#define constraints
+model = constraints(model, start, end, durations, task_to_machine_mapping, due_dates)
+
+#define objective
+model = objective(model, tardiness)
+
+# solve
+sat = model.solve()
+if not sat: raise Exception(""No solution found."")
+    
+# output
+print(""Max Tardiness:"", max(tardiness.value()))
+print(""Start times:"", start.value())
+print(""End times:"", end.value())
+print(""Tardiness:"", tardiness.value())
+
+# visualize
+visualize(jobs, task_to_machine_mapping, start.value(), end.value())"
+"Create job shop scheduling model with 4 jobs and 5 machines. All jobs have random routes and their operations have random durations. The objective function is makespan. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two has to be completed first[DEFINE_IMPORTS]","# imports
+import numpy as np
+import pandas as pd
+import plotly.express as px
+from cpmpy import *
+import random"
+"Create job shop scheduling model with 4 jobs and 5 machines. All jobs have random routes and their operations have random durations. The objective function is makespan. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two has to be completed first[DEFINE_CONFIGURATIONS]","# configurations
+random.seed(1)
+number_of_jobs = 4  
+number_of_machines = 5  
+maximum_duration = 20"
+"Create job shop scheduling model with 4 jobs and 5 machines. All jobs have random routes and their operations have random durations. The objective function is makespan. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two has to be completed first[DEFINE_UTILITY_FUNCTIONS]","# utility functions
+def get_durations(number_of_jobs, number_of_machines, maximum_duration):
+    return np.array([[random.randint(1, maximum_duration) for _ in  range(number_of_machines)] for _ in range(number_of_jobs)])
+
+def get_last_time(durations):
+    return sum(durations)
+
+def get_task_to_machine_mapping(number_of_jobs, number_of_machines):
+    return np.array([random.sample(range(1, number_of_machines+1), number_of_machines) for _ in range(number_of_jobs)])
+
+def get_jobs(number_of_jobs):
+    return [f""Job Number{i+1}"" for i in range(number_of_jobs)]"
+"Create job shop scheduling model with 4 jobs and 5 machines. All jobs have random routes and their operations have random durations. The objective function is makespan. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two has to be completed first[DEFINE_DATA_PREPARATION]","# data preparation
+durations = get_durations(number_of_jobs, number_of_machines, maximum_duration)
+last_time = get_last_time(durations)
+task_to_machine_mapping = get_task_to_machine_mapping(number_of_jobs, number_of_machines)
+jobs = get_jobs(number_of_jobs)"
+"Create job shop scheduling model with 4 jobs and 5 machines. All jobs have random routes and their operations have random durations. The objective function is makespan. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two has to be completed first[DEFINE_MODEL]","# model
+def model(last_time, task_to_machine_mapping):
+    number_of_jobs, number_of_tasks = task_to_machine_mapping.shape  # jobs are rows, tasks are columns
+
+    # Decision variables
+    start = intvar(0, last_time, shape=(number_of_jobs, number_of_tasks), name=""start"")  # Start time of each task
+    end = intvar(0, last_time, shape=(number_of_jobs, number_of_tasks), name=""end"")  # End time of each task
+    
+    # model
+    m = Model()
+    return m , (start, end)"
+"Create job shop scheduling model with 4 jobs and 5 machines. All jobs have random routes and their operations have random durations. The objective function is makespan. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two has to be completed first[DEFINE_CONSTRAINTS]","# constraints
+def constraints(m, start, end, durations, task_to_machine_mapping):
+    number_of_jobs, number_of_tasks = task_to_machine_mapping.shape
+    m += (end == start + durations) # The end of every task is the sum of its start and duration
+
+    # No overlap on the same machine
+    for j in range(number_of_jobs): 
+        for t in range(number_of_tasks):
+            m += [ (end[j, t] <= start[j2, t2]) | (end[j2, t2] <= start[j, t])
+                   for j2 in range(number_of_jobs) for t2 in range(number_of_tasks)
+                   if task_to_machine_mapping[j, t] == task_to_machine_mapping[j2, t2] and j != j2]
+
+    # Precedences: do tasks in order for all jobs
+    for t in range(number_of_tasks - 1):
+        m += [start[:, t + 1] >= end[:, t]]
+    
+    # Job two has to be completed first
+    for i in range(number_of_jobs):
+        if i != 1:
+            m += (end[i, 4] > end[1, 4])
+    return m"
+"Create job shop scheduling model with 4 jobs and 5 machines. All jobs have random routes and their operations have random durations. The objective function is makespan. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two has to be completed first[DEFINE_OBJECTIVE]","# Objective
+def objective(m, end):
+    m.minimize(max(end))
+
+    return m"
+"Create job shop scheduling model with 4 jobs and 5 machines. All jobs have random routes and their operations have random durations. The objective function is makespan. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two has to be completed first[DEFINE_VISUALIZATION]","# visualization
+def visualize(jobs, task_to_machine_mapping, start, end):
+    number_of_jobs, number_of_tasks = task_to_machine_mapping.shape  # jobs are rows, tasks are columns
+
+    job_names = np.repeat(jobs, number_of_tasks)
+    full_names = np.array([[f""Task {j}_{t}"" for t in range(number_of_tasks)] for j in jobs])
+    df = pd.DataFrame({'Start': start.flatten(),
+                       'End': end.flatten(),
+                       'Machine': task_to_machine_mapping.flatten().astype(str),
+                       'Job': job_names.flatten(),
+                       'Name': full_names.flatten(),
+                       })
+    df['Time'] = df['End'] - df['Start']  # Length on x-axis
+
+    fig = px.bar(df, orientation='h',
+                 base=""Start"", x=""Time"", y=""Machine"", color=""Job"", text=""Name"")
+    return fig.show()"
+"Create job shop scheduling model with 4 jobs and 5 machines. All jobs have random routes and their operations have random durations. The objective function is makespan. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two has to be completed first[DEFINE_SOLUTION]","#define model
+(model, (start,end)) = model(last_time, task_to_machine_mapping)
+
+#define constraints
+model = constraints(model, start, end, durations, task_to_machine_mapping)
+
+#define objective
+model = objective(model, end)
+
+# solve
+sat = model.solve()
+if not sat: raise Exception(""No solution found."")
+    
+# output
+print(""Makespan:"", max(end.value()))
+print(""Start times:"", start.value())
+print(""End times:"", end.value())
+
+# visualize
+visualize(jobs, task_to_machine_mapping, start.value(), end.value())"
+"Create job shop scheduling model with 6 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised.[DEFINE_IMPORTS]","# imports
+import numpy as np
+import pandas as pd
+import plotly.express as px
+from cpmpy import *
+import random"
+"Create job shop scheduling model with 6 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised.[DEFINE_CONFIGURATIONS]","# configurations
+random.seed(1)
+number_of_jobs = 6  
+number_of_machines = 6  
+maximum_duration = 20
+due_date_allowance = 1.3
+maximum_release_time = 50"
+"Create job shop scheduling model with 6 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised.[DEFINE_UTILITY_FUNCTIONS]","# utility functions
+def get_durations(number_of_jobs, number_of_machines, maximum_duration):
+    return np.array([[random.randint(1, maximum_duration) for _ in  range(number_of_machines)] for _ in range(number_of_jobs)])
+
+def get_last_time(durations):
+    return sum(durations)
+
+def get_task_to_machine_mapping(number_of_jobs, number_of_machines):
+    return np.array([random.sample(range(1, number_of_machines+1), number_of_machines) for _ in range(number_of_jobs)])
+
+def get_jobs(number_of_jobs):
+    return [f""Job Number{i+1}"" for i in range(number_of_jobs)]
+
+def get_due_dates(due_date_allowance, durations):
+    return (0 + due_date_allowance*np.sum(durations, axis=1)).astype(int)
+
+def get_release_times(number_of_jobs, maximum_release_time):
+    return [random.randint(0,maximum_release_time) for _ in range(number_of_jobs)]"
+"Create job shop scheduling model with 6 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised.[DEFINE_DATA_PREPARATION]","# data preparation
+durations = get_durations(number_of_jobs, number_of_machines, maximum_duration)
+last_time = get_last_time(durations)
+due_dates = get_due_dates(due_date_allowance, durations)
+release_times = get_release_times(number_of_jobs, maximum_release_time)
+task_to_machine_mapping = get_task_to_machine_mapping(number_of_jobs, number_of_machines)
+jobs = get_jobs(number_of_jobs)"
+"Create job shop scheduling model with 6 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised.[DEFINE_MODEL]","# model
+def model(last_time, task_to_machine_mapping):
+    number_of_jobs, number_of_tasks = task_to_machine_mapping.shape  # jobs are rows, tasks are columns
+
+    # Decision variables
+    start = intvar(0, last_time, shape=(number_of_jobs, number_of_tasks), name=""start"")  # Start time of each task
+    end = intvar(0, last_time, shape=(number_of_jobs, number_of_tasks), name=""end"")  # End time of each task
+    tardiness = intvar(0, last_time, shape=(number_of_jobs), name=""tardiness"")  # tardiness of each job
+
+    # model
+    m = Model()
+    return m , (start, end, tardiness)"
+"Create job shop scheduling model with 6 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised.[DEFINE_CONSTRAINTS]","# constraints
+def constraints(model, start, end, durations, task_to_machine_mapping, due_dates, release_times):
+    number_of_jobs, number_of_tasks = task_to_machine_mapping.shape
+    model + (start[:, 0] >= release_times)
+    model += (end == start + durations) # The end of every task is the sum of its start and duration
+
+    # No overlap on the same machine
+    for j in range(number_of_jobs): 
+        for t in range(number_of_tasks):
+            model += [ (end[j, t] <= start[j2, t2]) | (end[j2, t2] <= start[j, t])
+                   for j2 in range(number_of_jobs) for t2 in range(number_of_tasks)
+                   if task_to_machine_mapping[j, t] == task_to_machine_mapping[j2, t2] and j != j2]
+
+    # Precedences: do tasks in order for all jobs
+    for t in range(number_of_tasks - 1):
+        model += [start[:, t + 1] >= end[:, t]]
+    
+    # calculate tardiness
+    for j in range(number_of_jobs):
+        model += (tardiness[j] == max([end[j, number_of_tasks -1] - due_dates[j], 0]))
+    return model"
+"Create job shop scheduling model with 6 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised.[DEFINE_OBJECTIVE]","# Objective
+def objective(model, tardiness):
+    model.minimize(max(tardiness))
+
+    return model"
+"Create job shop scheduling model with 6 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised.[DEFINE_VISUALIZATION]","# visualization
+def visualize(jobs, task_to_machine_mapping, start, end):
+    number_of_jobs, number_of_tasks = task_to_machine_mapping.shape  # jobs are rows, tasks are columns
+
+    job_names = np.repeat(jobs, number_of_tasks)
+    full_names = np.array([[f""Task {j}_{t}"" for t in range(number_of_tasks)] for j in jobs])
+    df = pd.DataFrame({'Start': start.flatten(),
+                       'End': end.flatten(),
+                       'Machine': task_to_machine_mapping.flatten().astype(str),
+                       'Job': job_names.flatten(),
+                       'Name': full_names.flatten(),
+                       })
+    df['Time'] = df['End'] - df['Start']  # Length on x-axis
+
+    fig = px.bar(df, orientation='h',
+                 base=""Start"", x=""Time"", y=""Machine"", color=""Job"", text=""Name"")
+    return fig.show()"
+"Create job shop scheduling model with 6 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised.[DEFINE_SOLUTION]","#define model
+(model, (start,end, tardiness)) = model(last_time, task_to_machine_mapping)
+
+#define constraints
+model = constraints(model, start, end, durations, task_to_machine_mapping, due_dates, release_times)
+
+#define objective
+model = objective(model, tardiness)
+
+# solve
+sat = model.solve()
+if not sat: raise Exception(""No solution found."")
+    
+# output
+print(""Max Tardiness:"", max(tardiness.value()))
+print(""Start times:"", start.value())
+print(""End times:"", end.value())
+print(""Tardiness:"", tardiness.value())
+
+# visualize
+visualize(jobs, task_to_machine_mapping, start.value(), end.value())"
+"Create job shop scheduling model with 6 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two and four will have task durations in minutes. Other jobs will have task durations in seconds[DEFINE_IMPORTS]","# imports
+import numpy as np
+import pandas as pd
+import plotly.express as px
+from cpmpy import *
+import random"
+"Create job shop scheduling model with 6 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two and four will have task durations in minutes. Other jobs will have task durations in seconds[DEFINE_CONFIGURATIONS]","# configurations
+random.seed(1)
+number_of_jobs = 6  
+number_of_machines = 6  
+maximum_duration = 20
+due_date_allowance = 1.3"
+"Create job shop scheduling model with 6 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two and four will have task durations in minutes. Other jobs will have task durations in seconds[DEFINE_UTILITY_FUNCTIONS]","# utility functions
+def get_durations(number_of_jobs, number_of_machines, maximum_duration):
+    durations = []
+    for i in range(number_of_jobs):
+        if(i==1 or i==3):
+            durations.append([random.randint(1, maximum_duration)*60 for _ in  range(number_of_machines)]) 
+        else:
+            durations.append([random.randint(1, maximum_duration) for _ in  range(number_of_machines)])
+        
+    return np.array(durations)
+
+def get_last_time(durations):
+    return sum(durations)
+
+def get_task_to_machine_mapping(number_of_jobs, number_of_machines):
+    return np.array([random.sample(range(1, number_of_machines+1), number_of_machines) for _ in range(number_of_jobs)])
+
+def get_jobs(number_of_jobs):
+    return [f""Job Number{i+1}"" for i in range(number_of_jobs)]
+
+def get_due_dates(due_date_allowance, durations):
+    return (0 + due_date_allowance*np.sum(durations, axis=1)).astype(int)"
+"Create job shop scheduling model with 6 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two and four will have task durations in minutes. Other jobs will have task durations in seconds[DEFINE_DATA_PREPARATION]","# data preparation
+durations = get_durations(number_of_jobs, number_of_machines, maximum_duration)
+last_time = get_last_time(durations)
+due_dates = get_due_dates(due_date_allowance, durations)
+task_to_machine_mapping = get_task_to_machine_mapping(number_of_jobs, number_of_machines)
+jobs = get_jobs(number_of_jobs)"
+"Create job shop scheduling model with 6 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two and four will have task durations in minutes. Other jobs will have task durations in seconds[DEFINE_MODEL]","# model
+def model(last_time, task_to_machine_mapping):
+    number_of_jobs, number_of_tasks = task_to_machine_mapping.shape  # jobs are rows, tasks are columns
+
+    # Decision variables
+    start = intvar(0, last_time, shape=(number_of_jobs, number_of_tasks), name=""start"")  # Start time of each task
+    end = intvar(0, last_time, shape=(number_of_jobs, number_of_tasks), name=""end"")  # End time of each task
+    tardiness = intvar(0, last_time, shape=(number_of_jobs), name=""tardiness"")  # tardiness of each job
+
+    
+    # model
+    m = Model()
+    return m, (start, end, tardiness)"
+"Create job shop scheduling model with 6 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two and four will have task durations in minutes. Other jobs will have task durations in seconds[DEFINE_CONSTRAINTS]","# constraints
+def constraints(m, start, end, tardiness, durations, task_to_machine_mapping, due_dates):
+    number_of_jobs, number_of_tasks = task_to_machine_mapping.shape
+    m += (end == start + durations) # The end of every task is the sum of its start and duration
+
+    # No overlap on the same machine
+    for j in range(number_of_jobs): 
+        for t in range(number_of_tasks):
+            m += [ (end[j, t] <= start[j2, t2]) | (end[j2, t2] <= start[j, t])
+                   for j2 in range(number_of_jobs) for t2 in range(number_of_tasks)
+                   if task_to_machine_mapping[j, t] == task_to_machine_mapping[j2, t2] and j != j2]
+
+    # Precedences: do tasks in order for all jobs
+    for t in range(number_of_tasks - 1):
+        m += [start[:, t + 1] >= end[:, t]]
+    
+    # calculate tardiness
+    for j in range(number_of_jobs):
+        m += (tardiness[j] == max([end[j, number_of_tasks -1] - due_dates[j], 0]))
+    return m"
+"Create job shop scheduling model with 6 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two and four will have task durations in minutes. Other jobs will have task durations in seconds[DEFINE_OBJECTIVE]","# Objective
+def objective(m, tardiness):
+    m.minimize(max(tardiness))
+
+    return m"
+"Create job shop scheduling model with 6 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two and four will have task durations in minutes. Other jobs will have task durations in seconds[DEFINE_VISUALIZATION]","# visualization
+def visualize(jobs, task_to_machine_mapping, start, end):
+    number_of_jobs, number_of_tasks = task_to_machine_mapping.shape  # jobs are rows, tasks are columns
+
+    job_names = np.repeat(jobs, number_of_tasks)
+    full_names = np.array([[f""Task {j}_{t}"" for t in range(number_of_tasks)] for j in jobs])
+    df = pd.DataFrame({'Start': start.flatten(),
+                       'End': end.flatten(),
+                       'Machine': task_to_machine_mapping.flatten().astype(str),
+                       'Job': job_names.flatten(),
+                       'Name': full_names.flatten(),
+                       })
+    df['Time'] = df['End'] - df['Start']  # Length on x-axis
+
+    fig = px.bar(df, orientation='h',
+                 base=""Start"", x=""Time"", y=""Machine"", color=""Job"", text=""Name"")
+    return fig.show()"
+"Create job shop scheduling model with 6 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. The objective function is maximum tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two and four will have task durations in minutes. Other jobs will have task durations in seconds[DEFINE_SOLUTION]","#define model
+(model, (start,end, tardiness)) = model(last_time, task_to_machine_mapping)
+
+#define constraints
+model = constraints(model, start, end, tardiness, durations, task_to_machine_mapping, due_dates)
+
+#define objective
+model = objective(model, tardiness)
+
+# solve
+sat = model.solve()
+if not sat: raise Exception(""No solution found."")
+    
+# output
+print(""Max Tardiness:"", max(tardiness.value()))
+print(""Start times:"", start.value())
+print(""End times:"", end.value())
+print(""Tardiness:"", tardiness.value())
+
+# visualize
+visualize(jobs, task_to_machine_mapping, start.value(), end.value())"
+"Create job shop scheduling model with 5 jobs and 5 machines. All jobs have random routes and their operations have random durations. The objective function is makespan. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: The first task related to each job shoub be completed before the completion of any job.[DEFINE_IMPORTS]","# imports
+import numpy as np
+import pandas as pd
+import plotly.express as px
+from cpmpy import *
+import random"
+"Create job shop scheduling model with 5 jobs and 5 machines. All jobs have random routes and their operations have random durations. The objective function is makespan. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: The first task related to each job shoub be completed before the completion of any job.[DEFINE_CONFIGURATIONS]","# configurations
+random.seed(1)
+number_of_jobs = 5  
+number_of_machines = 5  
+maximum_duration = 20"
+"Create job shop scheduling model with 5 jobs and 5 machines. All jobs have random routes and their operations have random durations. The objective function is makespan. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: The first task related to each job shoub be completed before the completion of any job.[DEFINE_UTILITY_FUNCTIONS]","# utility functions
+def get_durations(number_of_jobs, number_of_machines, maximum_duration):
+    return np.array([[random.randint(1, maximum_duration) for _ in  range(number_of_machines)] for _ in range(number_of_jobs)])
+
+def get_last_time(durations):
+    return sum(durations)
+
+def get_task_to_machine_mapping(number_of_jobs, number_of_machines):
+    return np.array([random.sample(range(1, number_of_machines+1), number_of_machines) for _ in range(number_of_jobs)])
+
+def get_jobs(number_of_jobs):
+    return [f""Job Number{i+1}"" for i in range(number_of_jobs)]"
+"Create job shop scheduling model with 5 jobs and 5 machines. All jobs have random routes and their operations have random durations. The objective function is makespan. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: The first task related to each job shoub be completed before the completion of any job.[DEFINE_DATA_PREPARATION]","# data preparation
+durations = get_durations(number_of_jobs, number_of_machines, maximum_duration)
+last_time = get_last_time(durations)
+task_to_machine_mapping = get_task_to_machine_mapping(number_of_jobs, number_of_machines)
+jobs = get_jobs(number_of_jobs)"
+"Create job shop scheduling model with 5 jobs and 5 machines. All jobs have random routes and their operations have random durations. The objective function is makespan. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: The first task related to each job shoub be completed before the completion of any job.[DEFINE_MODEL]","# model
+def model(last_time, task_to_machine_mapping):
+    number_of_jobs, number_of_tasks = task_to_machine_mapping.shape  # jobs are rows, tasks are columns
+
+    # Decision variables
+    start = intvar(0, last_time, shape=(number_of_jobs, number_of_tasks), name=""start"")  # Start time of each task
+    end = intvar(0, last_time, shape=(number_of_jobs, number_of_tasks), name=""end"")  # End time of each task
+    
+    # model
+    m = Model()
+    return m, (start, end)"
+"Create job shop scheduling model with 5 jobs and 5 machines. All jobs have random routes and their operations have random durations. The objective function is makespan. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: The first task related to each job shoub be completed before the completion of any job.[DEFINE_CONSTRAINTS]","# constraints
+def constraints(m, start, end, durations, task_to_machine_mapping):
+    number_of_jobs, number_of_tasks = task_to_machine_mapping.shape
+    m += (end == start + durations) # The end of every task is the sum of its start and duration
+
+    # No overlap on the same machine
+    for j in range(number_of_jobs): 
+        for t in range(number_of_tasks):
+            m += [ (end[j, t] <= start[j2, t2]) | (end[j2, t2] <= start[j, t])
+                   for j2 in range(number_of_jobs) for t2 in range(number_of_tasks)
+                   if task_to_machine_mapping[j, t] == task_to_machine_mapping[j2, t2] and j != j2]
+
+    # Precedences: do tasks in order for all jobs
+    for t in range(number_of_tasks - 1):
+        m += [start[:, t + 1] >= end[:, t]]
+    
+    # The first task related to each job shoub be completed before the completion of any job
+    for i in range(number_of_jobs):
+        m += (end[:, 0] <= end[i, 4])
+    return m"
+"Create job shop scheduling model with 5 jobs and 5 machines. All jobs have random routes and their operations have random durations. The objective function is makespan. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: The first task related to each job shoub be completed before the completion of any job.[DEFINE_OBJECTIVE]","# Objective
+def objective(m, end):
+    m.minimize(max(end))
+
+    return m"
+"Create job shop scheduling model with 5 jobs and 5 machines. All jobs have random routes and their operations have random durations. The objective function is makespan. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: The first task related to each job shoub be completed before the completion of any job.[DEFINE_VISUALIZATION]","# visualization
+def visualize(jobs, task_to_machine_mapping, start, end):
+    number_of_jobs, number_of_tasks = task_to_machine_mapping.shape  # jobs are rows, tasks are columns
+
+    job_names = np.repeat(jobs, number_of_tasks)
+    full_names = np.array([[f""Task {j}_{t}"" for t in range(number_of_tasks)] for j in jobs])
+    df = pd.DataFrame({'Start': start.flatten(),
+                       'End': end.flatten(),
+                       'Machine': task_to_machine_mapping.flatten().astype(str),
+                       'Job': job_names.flatten(),
+                       'Name': full_names.flatten(),
+                       })
+    df['Time'] = df['End'] - df['Start']  # Length on x-axis
+
+    fig = px.bar(df, orientation='h',
+                 base=""Start"", x=""Time"", y=""Machine"", color=""Job"", text=""Name"")
+    return fig.show()"
+"Create job shop scheduling model with 5 jobs and 5 machines. All jobs have random routes and their operations have random durations. The objective function is makespan. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: The first task related to each job shoub be completed before the completion of any job.[DEFINE_SOLUTION]","#define model
+(model, (start,end)) = model(last_time, task_to_machine_mapping)
+
+#define constraints
+model = constraints(model, start, end, durations, task_to_machine_mapping)
+
+#define objectives
+model = objective(model, end)
+
+# solve
+sat = model.solve()
+if not sat: raise Exception(""No solution found."")
+    
+# output
+print(""Makespan:"", max(end.value()))
+print(""Start times:"", start.value())
+print(""End times:"", end.value())
+
+# visualize
+visualize(jobs, task_to_machine_mapping, start.value(), end.value())"
+"Create job shop scheduling model with 6 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total weighted tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two has to be completed first[DEFINE_IMPORTS]","# imports
+import numpy as np
+import pandas as pd
+import plotly.express as px
+from cpmpy import *
+import random"
+"Create job shop scheduling model with 6 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total weighted tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two has to be completed first[DEFINE_CONFIGURATIONS]","# configurations
+random.seed(1)
+number_of_jobs = 6  
+number_of_machines = 6  
+maximum_duration = 20
+due_date_allowance = 1.3
+maximum_release_time = 50
+weight_choices = [1, 2, 4]
+probabilities = [0.2, 0.6, 0.2]"
+"Create job shop scheduling model with 6 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total weighted tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two has to be completed first[DEFINE_UTILITY_FUNCTIONS]","# utility functions
+def get_durations(number_of_jobs, number_of_machines, maximum_duration):
+    return np.array([[random.randint(1, maximum_duration) for _ in  range(number_of_machines)] for _ in range(number_of_jobs)])
+
+def get_last_time(durations):
+    return sum(durations)
+
+def get_task_to_machine_mapping(number_of_jobs, number_of_machines):
+    return np.array([random.sample(range(1, number_of_machines+1), number_of_machines) for _ in range(number_of_jobs)])
+
+def get_jobs(number_of_jobs):
+    return [f""Job Number{i+1}"" for i in range(number_of_jobs)]
+
+def get_due_dates(due_date_allowance, durations):
+    return (0 + due_date_allowance*np.sum(durations, axis=1)).astype(int)
+
+def get_release_times(number_of_jobs, maximum_release_time):
+    return [random.randint(0,maximum_release_time) for _ in range(number_of_jobs)]
+
+def get_weights(weight_choices, probabilities, number_of_jobs):
+    return random.choices(weight_choices, weights=probabilities, k = number_of_jobs)"
+"Create job shop scheduling model with 6 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total weighted tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two has to be completed first[DEFINE_DATA_PREPARATION]","# data preparation
+durations = get_durations(number_of_jobs, number_of_machines, maximum_duration)
+last_time = get_last_time(durations)
+due_dates = get_due_dates(due_date_allowance, durations)
+release_times = get_release_times(number_of_jobs, maximum_release_time)
+weights = get_weights(weight_choices, probabilities, number_of_jobs)
+task_to_machine_mapping = get_task_to_machine_mapping(number_of_jobs, number_of_machines)
+jobs = get_jobs(number_of_jobs)"
+"Create job shop scheduling model with 6 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total weighted tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two has to be completed first[DEFINE_MODEL]","# model
+def model(last_time, task_to_machine_mapping):
+    number_of_jobs, number_of_tasks = task_to_machine_mapping.shape  # jobs are rows, tasks are columns
+
+    # Decision variables
+    start = intvar(0, last_time, shape=(number_of_jobs, number_of_tasks), name=""start"")  # Start time of each task
+    end = intvar(0, last_time, shape=(number_of_jobs, number_of_tasks), name=""end"")  # End time of each task
+    tardiness = intvar(0, last_time, shape=(number_of_jobs), name=""tardiness"")  # tardiness of each job
+
+    # model
+    m = Model()
+    return m, (start, end, tardiness)"
+"Create job shop scheduling model with 6 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total weighted tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two has to be completed first[DEFINE_CONSTRAINTS]","# constraints
+def constraints(m, start, end, tardiness, durations, task_to_machine_mapping, due_dates, release_times):
+    number_of_jobs, number_of_tasks = task_to_machine_mapping.shape
+    m + (start[:, 0] >= release_times)
+    m += (end == start + durations) # The end of every task is the sum of its start and duration
+
+    # No overlap on the same machine
+    for j in range(number_of_jobs): 
+        for t in range(number_of_tasks):
+            m += [ (end[j, t] <= start[j2, t2]) | (end[j2, t2] <= start[j, t])
+                   for j2 in range(number_of_jobs) for t2 in range(number_of_tasks)
+                   if task_to_machine_mapping[j, t] == task_to_machine_mapping[j2, t2] and j != j2]
+
+    # Precedences: do tasks in order for all jobs
+    for t in range(number_of_tasks - 1):
+        m += [start[:, t + 1] >= end[:, t]]
+    
+    # calculate tardiness
+    for j in range(number_of_jobs):
+        m += (tardiness[j] == max([end[j, number_of_tasks -1] - due_dates[j], 0]))
+        
+    # Job two has to be completed first
+    for i in range(number_of_jobs):
+        if i != 1:
+            m += (end[i, 5] > end[1, 5])
+    return m"
+"Create job shop scheduling model with 6 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total weighted tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two has to be completed first[DEFINE_OBJECTIVE]","# Objective
+def objective(m, weights, tardiness):
+    m.minimize(sum(weights*tardiness))
+
+
+    return m"
+"Create job shop scheduling model with 6 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total weighted tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two has to be completed first[DEFINE_VISUALIZATION]","# visualization
+def visualize(jobs, task_to_machine_mapping, start, end):
+    number_of_jobs, number_of_tasks = task_to_machine_mapping.shape  # jobs are rows, tasks are columns
+
+    job_names = np.repeat(jobs, number_of_tasks)
+    full_names = np.array([[f""Task {j}_{t}"" for t in range(number_of_tasks)] for j in jobs])
+    df = pd.DataFrame({'Start': start.flatten(),
+                       'End': end.flatten(),
+                       'Machine': task_to_machine_mapping.flatten().astype(str),
+                       'Job': job_names.flatten(),
+                       'Name': full_names.flatten(),
+                       })
+    df['Time'] = df['End'] - df['Start']  # Length on x-axis
+
+    fig = px.bar(df, orientation='h',
+                 base=""Start"", x=""Time"", y=""Machine"", color=""Job"", text=""Name"")
+    return fig.show()"
+"Create job shop scheduling model with 6 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total weighted tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two has to be completed first[DEFINE_SOLUTION]","#define model
+(model, (start,end, tardiness)) = model(last_time, task_to_machine_mapping)
+#define constraints
+model = constraints(model, start, end, tardiness, durations, task_to_machine_mapping, due_dates, release_times)
+
+#define objective
+model = objective(model, weights, tardiness)
+# solve
+sat = model.solve()
+if not sat: raise Exception(""No solution found."")
+    
+# output
+print(""Total Weighted Tardiness:"", sum(weights*tardiness.value()))
+print(""Start times:"", start.value())
+print(""End times:"", end.value())
+print(""Tardiness:"", tardiness.value())
+
+# visualize
+visualize(jobs, task_to_machine_mapping, start.value(), end.value())"
+"Create job shop scheduling model with 4 jobs and 4 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total weighted tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised.[DEFINE_IMPORTS]","# imports
+import numpy as np
+import pandas as pd
+import plotly.express as px
+from cpmpy import *
+import random"
+"Create job shop scheduling model with 4 jobs and 4 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total weighted tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised.[DEFINE_CONFIGURATIONS]","# configurations
+random.seed(1)
+number_of_jobs = 4  
+number_of_machines = 4  
+maximum_duration = 20
+due_date_allowance = 1.3
+maximum_release_time = 50
+weight_choices = [1, 2, 4]
+probabilities = [0.2, 0.6, 0.2]"
+"Create job shop scheduling model with 4 jobs and 4 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total weighted tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised.[DEFINE_UTILITY_FUNCTIONS]","# utility functions
+def get_durations(number_of_jobs, number_of_machines, maximum_duration):
+    return np.array([[random.randint(1, maximum_duration) for _ in  range(number_of_machines)] for _ in range(number_of_jobs)])
+
+def get_last_time(durations):
+    return sum(durations)
+
+def get_task_to_machine_mapping(number_of_jobs, number_of_machines):
+    return np.array([random.sample(range(1, number_of_machines+1), number_of_machines) for _ in range(number_of_jobs)])
+
+def get_jobs(number_of_jobs):
+    return [f""Job Number{i+1}"" for i in range(number_of_jobs)]
+
+def get_due_dates(due_date_allowance, durations):
+    return (0 + due_date_allowance*np.sum(durations, axis=1)).astype(int)
+
+def get_release_times(number_of_jobs, maximum_release_time):
+    return [random.randint(0,maximum_release_time) for _ in range(number_of_jobs)]
+
+def get_weights(weight_choices, probabilities, number_of_jobs):
+    return random.choices(weight_choices, weights=probabilities, k = number_of_jobs)"
+"Create job shop scheduling model with 4 jobs and 4 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total weighted tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised.[DEFINE_DATA_PREPARATION]","# data preparation
+durations = get_durations(number_of_jobs, number_of_machines, maximum_duration)
+last_time = get_last_time(durations)
+due_dates = get_due_dates(due_date_allowance, durations)
+release_times = get_release_times(number_of_jobs, maximum_release_time)
+weights = get_weights(weight_choices, probabilities, number_of_jobs)
+task_to_machine_mapping = get_task_to_machine_mapping(number_of_jobs, number_of_machines)
+jobs = get_jobs(number_of_jobs)"
+"Create job shop scheduling model with 4 jobs and 4 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total weighted tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised.[DEFINE_MODEL]","# model
+def model(last_time, task_to_machine_mapping):
+    number_of_jobs, number_of_tasks = task_to_machine_mapping.shape  # jobs are rows, tasks are columns
+
+    # Decision variables
+    start = intvar(0, last_time, shape=(number_of_jobs, number_of_tasks), name=""start"")  # Start time of each task
+    end = intvar(0, last_time, shape=(number_of_jobs, number_of_tasks), name=""end"")  # End time of each task
+    tardiness = intvar(0, last_time, shape=(number_of_jobs), name=""tardiness"")  # tardiness of each job
+
+    # model
+    m = Model()
+    return m, (start, end, tardiness)"
+"Create job shop scheduling model with 4 jobs and 4 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total weighted tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised.[DEFINE_CONSTRAINTS]","# constraints
+def constraints(model, start, end, tardiness, durations, task_to_machine_mapping, due_dates, release_times):
+    number_of_jobs, number_of_tasks = task_to_machine_mapping.shape
+    model + (start[:, 0] >= release_times)
+    model += (end == start + durations) # The end of every task is the sum of its start and duration
+
+    # No overlap on the same machine
+    for j in range(number_of_jobs): 
+        for t in range(number_of_tasks):
+            model += [ (end[j, t] <= start[j2, t2]) | (end[j2, t2] <= start[j, t])
+                   for j2 in range(number_of_jobs) for t2 in range(number_of_tasks)
+                   if task_to_machine_mapping[j, t] == task_to_machine_mapping[j2, t2] and j != j2]
+
+    # Precedences: do tasks in order for all jobs
+    for t in range(number_of_tasks - 1):
+        model += [start[:, t + 1] >= end[:, t]]
+    
+    # calculate tardiness
+    for j in range(number_of_jobs):
+        model += (tardiness[j] == max([end[j, number_of_tasks -1] - due_dates[j], 0]))
+    return model"
+"Create job shop scheduling model with 4 jobs and 4 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total weighted tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised.[DEFINE_OBJECTIVE]","# Objective
+def objective(model, weights, tardiness):
+    model.minimize(sum(weights*tardiness))
+
+
+    return model"
+"Create job shop scheduling model with 4 jobs and 4 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total weighted tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised.[DEFINE_VISUALIZATION]","# visualization
+def visualize(jobs, task_to_machine_mapping, start, end):
+    number_of_jobs, number_of_tasks = task_to_machine_mapping.shape  # jobs are rows, tasks are columns
+
+    job_names = np.repeat(jobs, number_of_tasks)
+    full_names = np.array([[f""Task {j}_{t}"" for t in range(number_of_tasks)] for j in jobs])
+    df = pd.DataFrame({'Start': start.flatten(),
+                       'End': end.flatten(),
+                       'Machine': task_to_machine_mapping.flatten().astype(str),
+                       'Job': job_names.flatten(),
+                       'Name': full_names.flatten(),
+                       })
+    df['Time'] = df['End'] - df['Start']  # Length on x-axis
+
+    fig = px.bar(df, orientation='h',
+                 base=""Start"", x=""Time"", y=""Machine"", color=""Job"", text=""Name"")
+    return fig.show()"
+"Create job shop scheduling model with 4 jobs and 4 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total weighted tardiness. Maximum duration is 20. After solving the problem, solutions will be printed and visualised.[DEFINE_SOLUTION]","#define model
+(model, (start,end, tardiness)) = model(last_time, task_to_machine_mapping)
+
+#define constraints
+model = constraints(model, start, end, tardiness, durations, task_to_machine_mapping, due_dates, release_times)
+
+#define objective
+model = objective(model, weights, tardiness)
+
+# solve
+sat = model.solve()
+if not sat: raise Exception(""No solution found."")
+    
+# output
+print(""Total Weighted Tardiness:"", sum(weights*tardiness.value()))
+print(""Start times:"", start.value())
+print(""End times:"", end.value())
+print(""Tardiness:"", tardiness.value())
+
+# visualize
+visualize(jobs, task_to_machine_mapping, start.value(), end.value())"
+"Create job shop scheduling model with 7 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total flow time (completion time - release time). Maximum duration is 20. Note: Job two and four will have task durations in minutes. Other jobs will have task durations in seconds[DEFINE_IMPORTS]","# imports
+import numpy as np
+import pandas as pd
+import plotly.express as px
+from cpmpy import *
+import random"
+"Create job shop scheduling model with 7 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total flow time (completion time - release time). Maximum duration is 20. Note: Job two and four will have task durations in minutes. Other jobs will have task durations in seconds[DEFINE_CONFIGURATIONS]","# configurations
+random.seed(1)
+number_of_jobs = 7  
+number_of_machines = 6  
+maximum_duration = 20
+due_date_allowance = 1.3
+maximum_release_time = 50
+weight_choices = [1, 2, 4]
+probabilities = [0.2, 0.6, 0.2]"
+"Create job shop scheduling model with 7 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total flow time (completion time - release time). Maximum duration is 20. Note: Job two and four will have task durations in minutes. Other jobs will have task durations in seconds[DEFINE_UTILITY_FUNCTIONS]","# utility functions
+def get_durations(number_of_jobs, number_of_machines, maximum_duration):
+    durations = []
+    for i in range(number_of_jobs):
+        if(i==1 or i==3):
+            durations.append([random.randint(1, maximum_duration)*60 for _ in  range(number_of_machines)]) 
+        else:
+            durations.append([random.randint(1, maximum_duration) for _ in  range(number_of_machines)])
+        
+    return np.array(durations)
+
+def get_last_time(durations):
+    return sum(durations)
+
+def get_task_to_machine_mapping(number_of_jobs, number_of_machines):
+    return np.array([random.sample(range(1, number_of_machines+1), number_of_machines) for _ in range(number_of_jobs)])
+
+def get_jobs(number_of_jobs):
+    return [f""Job Number{i+1}"" for i in range(number_of_jobs)]
+
+def get_due_dates(due_date_allowance, durations):
+    return (0 + due_date_allowance*np.sum(durations, axis=1)).astype(int)
+
+def get_release_times(number_of_jobs, maximum_release_time):
+    return [random.randint(0,maximum_release_time) for _ in range(number_of_jobs)]
+
+def get_weights(weight_choices, probabilities, number_of_jobs):
+    return random.choices(weight_choices, weights=probabilities, k = number_of_jobs)"
+"Create job shop scheduling model with 7 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total flow time (completion time - release time). Maximum duration is 20. Note: Job two and four will have task durations in minutes. Other jobs will have task durations in seconds[DEFINE_DATA_PREPARATION]","# data preparation
+durations = get_durations(number_of_jobs, number_of_machines, maximum_duration)
+last_time = get_last_time(durations)
+due_dates = get_due_dates(due_date_allowance, durations)
+release_times = get_release_times(number_of_jobs, maximum_release_time)
+weights = get_weights(weight_choices, probabilities, number_of_jobs)
+task_to_machine_mapping = get_task_to_machine_mapping(number_of_jobs, number_of_machines)
+jobs = get_jobs(number_of_jobs)"
+"Create job shop scheduling model with 7 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total flow time (completion time - release time). Maximum duration is 20. Note: Job two and four will have task durations in minutes. Other jobs will have task durations in seconds[DEFINE_MODEL]","# model
+def model(last_time, task_to_machine_mapping):
+    number_of_jobs, number_of_tasks = task_to_machine_mapping.shape  # jobs are rows, tasks are columns
+
+    # Decision variables
+    start = intvar(0, last_time, shape=(number_of_jobs, number_of_tasks), name=""start"")  # Start time of each task
+    end = intvar(0, last_time, shape=(number_of_jobs, number_of_tasks), name=""end"")  # End time of each task
+    tardiness = intvar(0, last_time, shape=(number_of_jobs), name=""tardiness"")  # tardiness of each job
+
+    # model
+    m = Model()
+    return m, (start, end, tardiness)"
+"Create job shop scheduling model with 7 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total flow time (completion time - release time). Maximum duration is 20. Note: Job two and four will have task durations in minutes. Other jobs will have task durations in seconds[DEFINE_CONSTRAINTS]","# constraints
+def constraints(m, start, end, tardiness, durations, task_to_machine_mapping, due_dates, release_times):
+    number_of_jobs, number_of_tasks = task_to_machine_mapping.shape
+    m + (start[:, 0] >= release_times)
+    m += (end == start + durations) # The end of every task is the sum of its start and duration
+
+    # No overlap on the same machine
+    for j in range(number_of_jobs): 
+        for t in range(number_of_tasks):
+            m += [ (end[j, t] <= start[j2, t2]) | (end[j2, t2] <= start[j, t])
+                   for j2 in range(number_of_jobs) for t2 in range(number_of_tasks)
+                   if task_to_machine_mapping[j, t] == task_to_machine_mapping[j2, t2] and j != j2]
+
+    # Precedences: do tasks in order for all jobs
+    for t in range(number_of_tasks - 1):
+        m += [start[:, t + 1] >= end[:, t]]
+    
+    # calculate tardiness
+    for j in range(number_of_jobs):
+        m += (tardiness[j] == max([end[j, number_of_tasks -1] - due_dates[j], 0]))
+    return m"
+"Create job shop scheduling model with 7 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total flow time (completion time - release time). Maximum duration is 20. Note: Job two and four will have task durations in minutes. Other jobs will have task durations in seconds[DEFINE_OBJECTIVE]","# Objective
+def objective(m, end, release_times, task_to_machine_mapping):
+    number_of_jobs, number_of_tasks = task_to_machine_mapping.shape
+    m.minimize(sum(end[:, number_of_tasks -1] - release_times))
+
+    return m"
+"Create job shop scheduling model with 7 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total flow time (completion time - release time). Maximum duration is 20. Note: Job two and four will have task durations in minutes. Other jobs will have task durations in seconds[DEFINE_VISUALIZATION]","# visualization
+def visualize(jobs, task_to_machine_mapping, start, end):
+    number_of_jobs, number_of_tasks = task_to_machine_mapping.shape  # jobs are rows, tasks are columns
+
+    job_names = np.repeat(jobs, number_of_tasks)
+    full_names = np.array([[f""Task {j}_{t}"" for t in range(number_of_tasks)] for j in jobs])
+    df = pd.DataFrame({'Start': start.flatten(),
+                       'End': end.flatten(),
+                       'Machine': task_to_machine_mapping.flatten().astype(str),
+                       'Job': job_names.flatten(),
+                       'Name': full_names.flatten(),
+                       })
+    df['Time'] = df['End'] - df['Start']  # Length on x-axis
+
+    fig = px.bar(df, orientation='h',
+                 base=""Start"", x=""Time"", y=""Machine"", color=""Job"", text=""Name"")
+    return fig.show()"
+"Create job shop scheduling model with 7 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total flow time (completion time - release time). Maximum duration is 20. Note: Job two and four will have task durations in minutes. Other jobs will have task durations in seconds[DEFINE_SOLUTION]","#define model
+(model, (start,end, tardiness)) = model(last_time, task_to_machine_mapping)
+
+#define constraints
+model = constraints(model, start, end, tardiness, durations, task_to_machine_mapping, due_dates, release_times)
+#define objective
+model = objective(model, end, release_times, task_to_machine_mapping)
+# solve
+sat = model.solve()
+if not sat: raise Exception(""No solution found."")
+    
+# output
+print(""Total Flowtime:"", sum(end[:, number_of_machines-1].value() - release_times))
+print(""Start times:"", start.value())
+print(""End times:"", end.value())
+print(""Tardiness:"", tardiness.value())
+
+# visualize
+visualize(jobs, task_to_machine_mapping, start.value(), end.value())"
+"Create job shop scheduling model with 5 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total flow time (completion time - release time). Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two has to be completed first[DEFINE_IMPORTS]","# imports
+import numpy as np
+import pandas as pd
+import plotly.express as px
+from cpmpy import *
+import random"
+"Create job shop scheduling model with 5 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total flow time (completion time - release time). Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two has to be completed first[DEFINE_CONFIGURATIONS]","# configurations
+random.seed(1)
+number_of_jobs = 5  
+number_of_machines = 6  
+maximum_duration = 20
+due_date_allowance = 1.3
+maximum_release_time = 50
+weight_choices = [1, 2, 4]
+probabilities = [0.2, 0.6, 0.2]"
+"Create job shop scheduling model with 5 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total flow time (completion time - release time). Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two has to be completed first[DEFINE_UTILITY_FUNCTIONS]","# utility functions
+def get_durations(number_of_jobs, number_of_machines, maximum_duration):
+    return np.array([[random.randint(1, maximum_duration) for _ in  range(number_of_machines)] for _ in range(number_of_jobs)])
+
+def get_last_time(durations):
+    return sum(durations)
+
+def get_task_to_machine_mapping(number_of_jobs, number_of_machines):
+    return np.array([random.sample(range(1, number_of_machines+1), number_of_machines) for _ in range(number_of_jobs)])
+
+def get_jobs(number_of_jobs):
+    return [f""Job Number{i+1}"" for i in range(number_of_jobs)]
+
+def get_due_dates(due_date_allowance, durations):
+    return (0 + due_date_allowance*np.sum(durations, axis=1)).astype(int)
+
+def get_release_times(number_of_jobs, maximum_release_time):
+    return [random.randint(0,maximum_release_time) for _ in range(number_of_jobs)]
+
+def get_weights(weight_choices, probabilities, number_of_jobs):
+    return random.choices(weight_choices, weights=probabilities, k = number_of_jobs)"
+"Create job shop scheduling model with 5 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total flow time (completion time - release time). Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two has to be completed first[DEFINE_DATA_PREPARATION]","# data preparation
+durations = get_durations(number_of_jobs, number_of_machines, maximum_duration)
+last_time = get_last_time(durations)
+due_dates = get_due_dates(due_date_allowance, durations)
+release_times = get_release_times(number_of_jobs, maximum_release_time)
+weights = get_weights(weight_choices, probabilities, number_of_jobs)
+task_to_machine_mapping = get_task_to_machine_mapping(number_of_jobs, number_of_machines)
+jobs = get_jobs(number_of_jobs)"
+"Create job shop scheduling model with 5 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total flow time (completion time - release time). Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two has to be completed first[DEFINE_MODEL]","# model
+def model(last_time, task_to_machine_mapping):
+    number_of_jobs, number_of_tasks = task_to_machine_mapping.shape  # jobs are rows, tasks are columns
+
+    # Decision variables
+    start = intvar(0, last_time, shape=(number_of_jobs, number_of_tasks), name=""start"")  # Start time of each task
+    end = intvar(0, last_time, shape=(number_of_jobs, number_of_tasks), name=""end"")  # End time of each task
+    tardiness = intvar(0, last_time, shape=(number_of_jobs), name=""tardiness"")  # tardiness of each job
+
+    # model
+    m = Model()
+    return m, (start, end, tardiness)"
+"Create job shop scheduling model with 5 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total flow time (completion time - release time). Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two has to be completed first[DEFINE_CONSTRAINTS]","# constraints
+def constraints(m, start, end, tardiness, durations, task_to_machine_mapping, due_dates, release_times):
+    number_of_jobs, number_of_tasks = task_to_machine_mapping.shape
+    m + (start[:, 0] >= release_times)
+    m += (end == start + durations) # The end of every task is the sum of its start and duration
+
+    # No overlap on the same machine
+    for j in range(number_of_jobs): 
+        for t in range(number_of_tasks):
+            m += [ (end[j, t] <= start[j2, t2]) | (end[j2, t2] <= start[j, t])
+                   for j2 in range(number_of_jobs) for t2 in range(number_of_tasks)
+                   if task_to_machine_mapping[j, t] == task_to_machine_mapping[j2, t2] and j != j2]
+
+    # Precedences: do tasks in order for all jobs
+    for t in range(number_of_tasks - 1):
+        m += [start[:, t + 1] >= end[:, t]]
+    
+    # calculate tardiness
+    for j in range(number_of_jobs):
+        m += (tardiness[j] == max([end[j, number_of_tasks -1] - due_dates[j], 0]))
+        
+    # Job two has to be completed first
+    for i in range(number_of_jobs):
+        if i != 1:
+            m += (end[i, 5] > end[1, 5])
+    return m"
+"Create job shop scheduling model with 5 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total flow time (completion time - release time). Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two has to be completed first[DEFINE_OBJECTIVE]","# Objective
+def objective(m, end, release_times, task_to_machine_mapping):
+    number_of_jobs, number_of_tasks = task_to_machine_mapping.shape
+    m.minimize(sum(end[:, number_of_tasks -1] - release_times))
+
+    return m"
+"Create job shop scheduling model with 5 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total flow time (completion time - release time). Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two has to be completed first[DEFINE_VISUALIZATION]","# visualization
+def visualize(jobs, task_to_machine_mapping, start, end):
+    number_of_jobs, number_of_tasks = task_to_machine_mapping.shape  # jobs are rows, tasks are columns
+
+    job_names = np.repeat(jobs, number_of_tasks)
+    full_names = np.array([[f""Task {j}_{t}"" for t in range(number_of_tasks)] for j in jobs])
+    df = pd.DataFrame({'Start': start.flatten(),
+                       'End': end.flatten(),
+                       'Machine': task_to_machine_mapping.flatten().astype(str),
+                       'Job': job_names.flatten(),
+                       'Name': full_names.flatten(),
+                       })
+    df['Time'] = df['End'] - df['Start']  # Length on x-axis
+
+    fig = px.bar(df, orientation='h',
+                 base=""Start"", x=""Time"", y=""Machine"", color=""Job"", text=""Name"")
+    return fig.show()"
+"Create job shop scheduling model with 5 jobs and 6 machines. All jobs have random routes and their operations have random durations. The due dates are calculated based on a total processing time of each job multiplied a due date allowance of 1.3. Release time of a job is a random value from 0 to 50. Jobs cannot start before their release times. Each job has a weight following a random distribution in which 20% will have weight of 1, 60% will have weight of 2, and 20% will have weight of 4. The objective function is total flow time (completion time - release time). Maximum duration is 20. After solving the problem, solutions will be printed and visualised. Note: Job two has to be completed first[DEFINE_SOLUTION]","# define model
+(model, (start,end, tardiness)) = model(last_time, task_to_machine_mapping)
+
+#define constraints
+model = constraints(model, start, end, tardiness, durations, task_to_machine_mapping, due_dates, release_times)
+
+#define objective
+model = objective(model, end, release_times, task_to_machine_mapping)
+# solve
+sat = model.solve()
+if not sat: raise Exception(""No solution found."")
+    
+# output
+print(""Total Flowtime:"", sum(end[:, number_of_machines-1].value() - release_times))
+print(""Start times:"", start.value())
+print(""End times:"", end.value())
+print(""Tardiness:"", tardiness.value())
+
+# visualize
+visualize(jobs, task_to_machine_mapping, start.value(), end.value())"
